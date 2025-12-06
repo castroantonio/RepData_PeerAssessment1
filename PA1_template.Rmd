@@ -5,21 +5,297 @@ output:
     keep_md: true
 ---
 
+The present work uses data about personal movement, collected using activity monitoring devices.
+
+```{r}
+## Configuration
+# install.packages("reactable")
+# install.packages("ggplot2")
+# install.packages("patchwork")
+    
+library(reactable)
+library(ggplot2)
+library(patchwork)
+```
+
 
 ## Loading and preprocessing the data
+
+First of all we need to load the data:
+
+```{r}
+dataset <- read.csv(unz("activity.zip","activity.csv"), header=TRUE)
+```
+
+Let's see how it looks like:
+
+```{r}
+head(dataset)
+```
+
+Oh, *date* ttribute was loaded with type *character*. We need to change it:
+
+```{r}
+dataset$date <- as.Date(dataset$date, format = "%Y-%m-%d")
+```
+
+And now:
+
+```{r}
+head(dataset)
+```
+
+The firsts observations of *steps* are *NA*. Does it happen at the end?
+
+```{r}
+tail(dataset)
+```
+
+Let's get some more information about the dataset:
+
+```{r}
+str(dataset)
+```
+
+We have a total of `r nrow(dataset)` observations (exactly as informed on the project page), with 3 attributes. Now, some statistical information:
+
+```{r}
+summary(dataset)
+```
+
+Oh, *steps* attribute really have a lot of *NA*. The *date* starts in `r min(dataset$date)` and goes to `r max(dataset$date)`. Nothing special about *interval*.
+
+From the [Coursera](www.coursera.org) project page we have some information about the attributes:
+
+> steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+
+> date: The date on which the measurement was taken in YYYY-MM-DD format
+
+> interval: Identifier for the 5-minute interval in which measurement was taken
+
+If I was able to understand, for each *date*, we have for each 5 minute *interval* a measurement of number of *steps*.
+
+Let's see the full dataset, so we can go through the data.
+
+```{r}
+reactable(dataset,
+          defaultColDef = colDef(align = "center"),
+          bordered = TRUE,
+          highlight = TRUE)
+```
+
+I think I got it right, for the same day we have a lot of five minutes time intervals, for each one we have the total of steps.
+
 
 
 
 ## What is mean total number of steps taken per day?
 
+To count the total number of steps taken per day, we have to aggregate the dataset by date, summing the number of steps.
+
+```{r}
+## remove NA
+temp <- dataset[!(is.na(dataset$steps)), ]
+
+## aggregates the data
+steps_day <- aggregate(temp$steps, list(temp$date), FUN=sum)
+colnames(steps_day) <- c("date", "steps")
+```
+
+Let's see the resulting values:
+
+```{r}
+reactable(steps_day,
+          defaultColDef = colDef(align = "center"),
+          bordered = TRUE,
+          highlight = TRUE)
+```
+
+The following figure presents a histogram of the total number of steps taken by day.
+
+```{r}
+ggplot(steps_day, aes(steps)) +
+  geom_histogram(bins=7) +
+  labs(title = "Total Steps taken by day",
+       x = "Steps",
+       y = "Count") +
+  theme_minimal()
+```
+
+The mean and median of total number of steps cam be taken in different ways. The *summary* command:
+
+```{r}
+summary(steps_day$steps)
+```
+
+Or using a command for each information:
+
+ - *mean()* - with result: `r mean(steps_day$steps)`
+ 
+ - *median()* - with result: `r median(steps_day$steps)`
+ 
 
 
 ## What is the average daily activity pattern?
+
+This time we have to aggregate by the *interval*.
+
+```{r}
+## remove NA
+temp <- dataset[!(is.na(dataset$steps)), ]
+
+## aggregates the data
+steps_interval <- aggregate(temp$steps, list(temp$interval), FUN=mean)
+colnames(steps_interval) <- c("interval", "steps")
+```
+
+Let's see the time series of the average of steps, by time interval:
+
+```{r}
+ggplot(steps_interval, aes(interval, steps)) +
+  geom_line() +
+  labs(title = "Average steps by interval",
+       x = "Interval",
+       y = "Steps") +
+  theme_minimal()
+```
+
+The time interval wich has the maximum average is: `r steps_interval[steps_interval$steps==max(steps_interval$steps), "Interval"]`.
 
 
 
 ## Imputing missing values
 
+We had already seen that only *steps* attribute has *NA* values. We used the following command:
+
+```{r}
+summary(dataset)
+```
+
+As it is possible to see, *date* and *interval* do no have any *NA*. But the number of missing values in the dataset can be obtained like:
+
+```{r}
+total_na <- sum(is.na(dataset$steps)) + sum(is.na(dataset$date)) + sum(is.na(dataset$interval))
+
+print(paste0("The total of NA values is: ", total_na))
+```
+
+But there is an important observation at the course project page: "...(i.e. the total number of rows with NA)". This way a *NA* could occur in two attributes on the same observation and count as a unique occurrence:
+
+```{r}
+print(paste0("Total rows with at least one NA: ", nrow(dataset[is.na(dataset$steps) | is.na(dataset$date) | is.na(dataset$interval), ])))
+```
+
+As a strategy for filling in all of the missing values in the dataset, we could use the mean of the time interval through the days. Let's do it:
+
+```{r}
+filled_dataset <- dataset
+for (i in 1:nrow(dataset)) {
+  if (is.na(filled_dataset[i, "steps"])) {
+    interval <- filled_dataset[i, "interval"]
+    filled_dataset[i, "steps"] <- steps_interval[steps_interval$interval==interval, "steps"]
+  }
+}
+```
+
+Now we can chek it:
+
+```{r}
+summary(filled_dataset)
+```
+
+Yes, no more *NA*. The next step is to make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.
+
+```{r}
+## aggregates the data
+steps_day <- aggregate(temp$steps, list(temp$date), FUN=sum)
+colnames(steps_day) <- c("date", "steps")
+```
+
+The following figure presents a histogram of the total number of steps taken by day.
+
+```{r}
+ggplot(steps_day, aes(steps)) +
+  geom_histogram(bins=7) +
+  labs(title = "Total Steps taken by day",
+       x = "Steps",
+       y = "Count") +
+  theme_minimal()
+```
+
+The mean and median of total number of steps cam be taken in different ways. The *summary* command:
+
+```{r}
+summary(steps_day$steps)
+```
+
+Or using a command for each information:
+
+ - *mean()* - with result: `r mean(steps_day$steps)`
+ 
+ - *median()* - with result: `r median(steps_day$steps)`
+ 
+Using the approach of transform *NA* for the mean value of the time interval, there is no change in the mean value. So the histogram keeps the same.
+
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Creating a new factor variable for weekdays and weekends:
+
+```{r}
+saturday <- min(filled_dataset$date) - 2
+sunday <- min(filled_dataset$date) - 1
+filled_dataset$day_type <- (as.integer(filled_dataset$date - saturday) %% 7 == 0) |
+                          (as.integer(filled_dataset$date - sunday) %% 7 == 0)
+filled_dataset$day_type <- factor(filled_dataset$day_type,
+                                 levels=c(TRUE, FALSE),
+                                 labels=c("weekend", "weekday"))
+```
+
+To make a plot with the average of number of steps, we have to aggregate de data:
+
+```{r}
+steps_interval_day_type <- aggregate(filled_dataset$steps,
+                                     data=filled_dataset,
+                                     by=list(filled_dataset$day_type,
+                                             filled_dataset$interval),
+                                     FUN=mean)
+colnames(steps_interval_day_type) <- c("day_type", "interval", "steps")
+```
+
+
+Now, let's plot the time series. It can be side by side:
+
+```{r}
+ggplot(steps_interval_day_type, aes(x=interval, y=steps)) +
+  geom_line() +
+  facet_wrap(~ day_type) +
+  theme_minimal()
+```
+
+Different lines:
+
+```{r}
+
+p1 <- ggplot(steps_interval_day_type[steps_interval_day_type$day_type=="weekday",], aes(x=interval, y=steps)) +
+  geom_line() +
+  labs(title="Weekday") +
+  theme_minimal()
+
+p2 <- ggplot(steps_interval_day_type[steps_interval_day_type$day_type=="weekend",], aes(x=interval, y=steps)) +
+  geom_line() +
+  labs(title="Weekend") +
+  theme_minimal()
+
+p1 / p2
+```
+
+
+Or even at the same grid:
+
+```{r}
+ggplot(steps_interval_day_type, aes(x=interval, y=steps, colour=day_type)) +
+  geom_line() +
+  theme_minimal()
+```
